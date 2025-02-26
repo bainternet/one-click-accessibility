@@ -35,9 +35,7 @@ class Module extends Module_Base {
 			return;
 		}
 
-		wp_enqueue_script(
-			'ea11y-widget',
-			self::get_widget_url() . '?api_key=' . $plan_data->public_api_key,
+		wp_enqueue_script('ea11y-widget', site_url('/ally/widget.js'),
 			[],
 			EA11Y_VERSION,
 			true
@@ -131,11 +129,48 @@ class Module extends Module_Base {
 		return $option;
 	}
 
+
+	public function add_ally_widget_js_rewrite_rule() {
+		add_rewrite_rule('^ally\/widget\.js?$', 'index.php?ally_widget_js=1', 'top' );
+	}
+
+	public function add_ally_widget_js_query_var($vars) {
+		$vars[] = 'ally_widget_js';
+		return $vars;
+	}
+
+
+	public function serve_ally_widget_js() {
+		if ( get_query_var( 'ally_widget_js' ) ) {
+			$plan_data = Settings::get( Settings::PLAN_DATA );
+			$js = wp_remote_get( self::get_widget_url() . '?api_key=' . $plan_data->public_api_key, [
+				'timeout' => 5,
+				'headers' => [
+					'Accept' => 'application/javascript',
+					'referer' => wp_get_referer(),
+					'user-agent' => $_SERVER['HTTP_USER_AGENT'],
+					'X-Forwarded-For' => $_SERVER['REMOTE_ADDR'],
+				],
+			] );
+			header( 'Content-Type: application/javascript' );
+			header("Cache-Control: max-age=50000");
+			echo $js['body'];
+			die();
+		}
+	}
+
 	/**
 	 * Module constructor.
 	 */
 	public function __construct() {
 		add_action( 'wp_enqueue_scripts', [ $this, 'enqueue_accessibility_widget' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_accessibility_widget_admin' ] );
+
+		add_action('init', [ $this, 'add_ally_widget_js_rewrite_rule' ] );
+		add_filter('query_vars', [ $this, 'add_ally_widget_js_query_var' ] );
+		add_action('template_redirect', [$this, 'serve_ally_widget_js' ] );
 	}
 }
+
+
+
